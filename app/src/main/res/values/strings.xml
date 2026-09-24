@@ -30,6 +30,8 @@
     <string name="configure_mock_gps">Configure system mock GPS</string>
     <string name="zone_coordinates">S %1$s · W %2$s\nN %3$s · E %4$s</string>
     <string name="delete">Delete</string>
+    <string name="delete_zone_title">Delete zone?</string>
+    <string name="delete_zone_confirmation">Delete the zone “%1$s”?</string>
     <string name="debug_log">Debug log</string>
     <string name="new_bbox">New bbox</string>
     <string name="bbox_hint">Enter the bounds in decimal degrees.</string>

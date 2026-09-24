@@ -31,6 +31,8 @@ fun OsmMap(
     tileUrl: String,
     tileAttribution: String,
     incomingPoint: FilterStorage.IncomingPoint?,
+    focusedZone: BoundingBox?,
+    focusRequest: Int,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -47,6 +49,7 @@ fun OsmMap(
     }
     var map by remember { mutableStateOf<MapLibreMap?>(null) }
     var positionedForSignature by remember { mutableStateOf<String?>(null) }
+    var handledFocusRequest by remember { mutableStateOf(-1) }
 
     DisposableEffect(mapView) {
         mapView.onStart()
@@ -82,13 +85,24 @@ fun OsmMap(
         },
         update = {
             map?.setStyle(Style.Builder().fromJson(styleJson)) {
-                if (positionedForSignature != cameraSignature) {
+                if (focusedZone != null && handledFocusRequest != focusRequest) {
+                    moveCameraToZone(map!!, focusedZone)
+                    handledFocusRequest = focusRequest
+                } else if (positionedForSignature != cameraSignature) {
                     moveCameraToDefaultView(map!!, zoneSnapshot, incomingPoint)
                     positionedForSignature = cameraSignature
                 }
             }
         },
     )
+}
+
+private fun moveCameraToZone(map: MapLibreMap, zone: BoundingBox) {
+    val bounds = LatLngBounds.Builder()
+        .include(LatLng(zone.south, zone.west))
+        .include(LatLng(zone.north, zone.east))
+        .build()
+    map.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds, 48))
 }
 
 private fun moveCameraToDefaultView(

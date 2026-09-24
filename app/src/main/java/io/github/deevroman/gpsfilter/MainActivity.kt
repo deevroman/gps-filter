@@ -17,6 +17,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -110,6 +111,9 @@ fun GpsFilterScreen() {
     var gpxRecording by remember { mutableStateOf(GpxTrackRecorder.isRecording(context)) }
     var importingGeoJson by remember { mutableStateOf(false) }
     var geoJsonImportError by remember { mutableStateOf<String?>(null) }
+    var zonePendingDeletion by remember { mutableStateOf<BoundingBox?>(null) }
+    var focusedZone by remember { mutableStateOf<BoundingBox?>(null) }
+    var mapFocusRequest by remember { mutableStateOf(0) }
 
     fun refreshState() {
         filteringEnabled = FilterStorage.filteringEnabled(context)
@@ -202,6 +206,15 @@ fun GpsFilterScreen() {
         ) {
             item {
                 Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                    CurrentLocationStatus(
+                        filteringEnabled = filteringEnabled,
+                        incomingPoint = incomingPoint,
+                        filterResult = filterResult,
+                    )
+                }
+            }
+            item {
+                Box(modifier = Modifier.padding(horizontal = 16.dp)) {
                     FilterControl(
                         filteringEnabled = filteringEnabled,
                         onToggle = {
@@ -214,7 +227,13 @@ fun GpsFilterScreen() {
                                 permissionLauncher.launch(runtimePermissions())
                             }
                         },
-                        onOpenDeveloperSettings = {
+                    )
+                }
+            }
+            item {
+                Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                    OutlinedButton(
+                        onClick = {
                             runCatching {
                                 context.startActivity(
                                     Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS)
@@ -222,16 +241,8 @@ fun GpsFilterScreen() {
                                 )
                             }.onFailure { appendUiEvent(R.string.event_developer_settings_failed) }
                         },
-                    )
-                }
-            }
-            item {
-                Box(modifier = Modifier.padding(horizontal = 16.dp)) {
-                    CurrentLocationStatus(
-                        filteringEnabled = filteringEnabled,
-                        incomingPoint = incomingPoint,
-                        filterResult = filterResult,
-                    )
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text(stringResource(R.string.configure_mock_gps)) }
                 }
             }
             item {
@@ -240,6 +251,8 @@ fun GpsFilterScreen() {
                     tileUrl = tileUrl,
                     tileAttribution = tileAttribution,
                     incomingPoint = incomingPoint,
+                    focusedZone = focusedZone,
+                    focusRequest = mapFocusRequest,
                 )
             }
             item {
@@ -251,11 +264,11 @@ fun GpsFilterScreen() {
                 Box(modifier = Modifier.padding(horizontal = 16.dp)) {
                     ZoneRow(
                         zone = zone,
-                        onDelete = {
-                            zones.remove(zone)
-                            FilterStorage.saveZones(context, zones)
-                            appendUiEvent(R.string.event_zone_deleted, zone.name)
+                        onClick = {
+                            focusedZone = zone
+                            mapFocusRequest += 1
                         },
+                        onDelete = { zonePendingDeletion = zone },
                     )
                 }
             }
@@ -326,6 +339,20 @@ fun GpsFilterScreen() {
             onImport = ::importGeoJson,
         )
     }
+
+    zonePendingDeletion?.let { zone ->
+        DeleteZoneDialog(
+            zone = zone,
+            onDismiss = { zonePendingDeletion = null },
+            onDelete = {
+                zones.remove(zone)
+                FilterStorage.saveZones(context, zones)
+                if (focusedZone?.id == zone.id) focusedZone = null
+                appendUiEvent(R.string.event_zone_deleted, zone.name)
+                zonePendingDeletion = null
+            },
+        )
+    }
 }
 
 @Composable
@@ -381,14 +408,14 @@ private fun CurrentLocationStatus(
 private fun FilterControl(
     filteringEnabled: Boolean,
     onToggle: () -> Unit,
-    onOpenDeveloperSettings: () -> Unit,
 ) {
     Card(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onToggle),
         colors = CardDefaults.cardColors(
             containerColor = if (filteringEnabled) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
         ),
     ) {
-        Column(modifier = Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -396,9 +423,6 @@ private fun FilterControl(
             ) {
                 Text(stringResource(R.string.filtering), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Switch(checked = filteringEnabled, onCheckedChange = { onToggle() })
-            }
-            OutlinedButton(onClick = onOpenDeveloperSettings, modifier = Modifier.fillMaxWidth()) {
-                Text(stringResource(R.string.configure_mock_gps))
             }
         }
     }
@@ -410,6 +434,8 @@ private fun ZoneMap(
     tileUrl: String,
     tileAttribution: String,
     incomingPoint: FilterStorage.IncomingPoint?,
+    focusedZone: BoundingBox?,
+    focusRequest: Int,
 ) {
     Box(modifier = Modifier.fillMaxWidth().height(320.dp)) {
         OsmMap(
@@ -417,6 +443,8 @@ private fun ZoneMap(
             tileUrl = tileUrl,
             tileAttribution = tileAttribution,
             incomingPoint = incomingPoint,
+            focusedZone = focusedZone,
+            focusRequest = focusRequest,
             modifier = Modifier.fillMaxSize(),
         )
         Surface(
@@ -434,8 +462,8 @@ private fun ZoneMap(
 }
 
 @Composable
-private fun ZoneRow(zone: BoundingBox, onDelete: () -> Unit) {
-    Card {
+private fun ZoneRow(zone: BoundingBox, onClick: () -> Unit, onDelete: () -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(start = 16.dp, top = 12.dp, end = 8.dp, bottom = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -618,6 +646,25 @@ private fun GeoJsonImportDialog(
                 enabled = validUrl && !isImporting,
                 onClick = { onImport(url.trim()) },
             ) { Text(stringResource(if (isImporting) R.string.loading else R.string.import_action)) }
+        },
+    )
+}
+
+@Composable
+private fun DeleteZoneDialog(
+    zone: BoundingBox,
+    onDismiss: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    MovableDialog(
+        title = stringResource(R.string.delete_zone_title),
+        onDismissRequest = onDismiss,
+        content = {
+            Text(stringResource(R.string.delete_zone_confirmation, zone.name))
+        },
+        actions = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+            TextButton(onClick = onDelete) { Text(stringResource(R.string.delete)) }
         },
     )
 }
