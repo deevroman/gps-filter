@@ -1,0 +1,4 @@
+<resources>
+
+    <style name="Theme.GPSFilter" parent="android:style/Theme.Material.Light.NoActionBar" />
+</resources>
