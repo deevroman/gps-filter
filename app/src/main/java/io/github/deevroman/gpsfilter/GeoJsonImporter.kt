@@ -1,5 +1,6 @@
 package io.github.deevroman.gpsfilter
 
+import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
@@ -9,9 +10,9 @@ import java.net.URL
 object GeoJsonImporter {
     private const val MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 
-    fun importFromUrl(url: String): Result<List<BoundingBox>> = runCatching {
+    fun importFromUrl(context: Context, url: String): Result<List<BoundingBox>> = runCatching {
         val normalizedUrl = normalizeGitHubUrl(url)
-        require(normalizedUrl.startsWith("https://")) { "Поддерживаются только HTTPS-ссылки" }
+        require(normalizedUrl.startsWith("https://")) { context.getString(R.string.geojson_https_only) }
         val connection = (URL(normalizedUrl).openConnection() as HttpURLConnection).apply {
             connectTimeout = 15_000
             readTimeout = 15_000
@@ -21,19 +22,19 @@ object GeoJsonImporter {
         }
         try {
             val responseCode = connection.responseCode
-            require(responseCode in 200..299) { "Сервер вернул HTTP $responseCode" }
+            require(responseCode in 200..299) { context.getString(R.string.geojson_http_error, responseCode) }
             val payload = connection.inputStream.use { input ->
                 val bytes = input.readBytes()
-                require(bytes.size <= MAX_RESPONSE_BYTES) { "GeoJSON больше 2 МБ" }
+                require(bytes.size <= MAX_RESPONSE_BYTES) { context.getString(R.string.geojson_too_large) }
                 bytes.toString(Charsets.UTF_8)
             }
-            parseZones(JSONObject(payload))
+            parseZones(context, JSONObject(payload))
         } finally {
             connection.disconnect()
         }
     }
 
-    private fun parseZones(root: JSONObject): List<BoundingBox> {
+    private fun parseZones(context: Context, root: JSONObject): List<BoundingBox> {
         val objects = when (root.optString("type")) {
             "FeatureCollection" -> List(root.getJSONArray("features").length()) { index ->
                 root.getJSONArray("features").getJSONObject(index)
@@ -45,7 +46,7 @@ object GeoJsonImporter {
             bounds?.let { (west, south, east, north) ->
                 BoundingBox(
                     id = System.currentTimeMillis() + index,
-                    name = featureName(value, index + 1),
+                    name = featureName(context, value, index + 1),
                     south = south,
                     west = west,
                     north = north,
@@ -53,16 +54,16 @@ object GeoJsonImporter {
                 )
             }
         }
-        require(zones.isNotEmpty()) { "Не найдены GeoJSON Polygon или bbox" }
+        require(zones.isNotEmpty()) { context.getString(R.string.geojson_no_zones) }
         return zones
     }
 
-    private fun featureName(feature: JSONObject, index: Int): String {
+    private fun featureName(context: Context, feature: JSONObject, index: Int): String {
         val properties = feature.optJSONObject("properties")
         return properties?.optString("name")?.takeIf { it.isNotBlank() }
             ?: properties?.optString("title")?.takeIf { it.isNotBlank() }
             ?: feature.optString("id").takeIf { it.isNotBlank() }
-            ?: "Импортированная зона $index"
+            ?: context.getString(R.string.geojson_imported_zone, index)
     }
 
     private fun boundsFromBbox(bbox: JSONArray): Bounds? {

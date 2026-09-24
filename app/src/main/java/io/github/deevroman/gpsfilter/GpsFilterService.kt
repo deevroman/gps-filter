@@ -49,7 +49,7 @@ class GpsFilterService : Service(), LocationListener {
     private fun startFiltering() {
         stopped = false
         if (!hasLocationPermission()) {
-            fail("Нет доступа к геопозиции. Разрешите точную геолокацию в приложении.")
+            fail(getString(R.string.service_location_permission))
             return
         }
         startAsForegroundService()
@@ -71,10 +71,10 @@ class GpsFilterService : Service(), LocationListener {
             locationManager.setTestProviderEnabled(LocationManager.GPS_PROVIDER, true)
             testProviderInstalled = true
         } catch (exception: SecurityException) {
-            fail("Выберите GPS Filter в «Параметры разработчика → Приложение для фиктивных геоданных».")
+            fail(getString(R.string.service_select_mock_app))
             return
         } catch (exception: IllegalArgumentException) {
-            fail("Не удалось создать mock GPS provider: ${exception.message}")
+            fail(getString(R.string.service_create_mock_failed, exception.message))
             return
         }
 
@@ -89,13 +89,13 @@ class GpsFilterService : Service(), LocationListener {
             FilterStorage.setFilteringEnabled(this, true)
             FilterStorage.appendEvent(
                 this,
-                "${eventTime()}  Mock GPS включён; источник реальных данных: сеть",
+                getString(R.string.event_mock_enabled, eventTime()),
             )
             locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)?.let(::processSourceLocation)
         } catch (exception: SecurityException) {
-            fail("Не удалось получать координаты: ${exception.message}")
+            fail(getString(R.string.service_receive_location_failed, exception.message))
         } catch (exception: IllegalArgumentException) {
-            fail("Источник сетевой геолокации недоступен на устройстве.")
+            fail(getString(R.string.service_network_provider_unavailable))
         }
     }
 
@@ -124,20 +124,20 @@ class GpsFilterService : Service(), LocationListener {
             lastSafePoint = safePoint
             FilterStorage.saveLastSafePoint(this, safePoint)
             inject(safePoint)
-            FilterStorage.appendEvent(this, "${eventTime()}  Безопасная точка передана mock GPS")
+            FilterStorage.appendEvent(this, getString(R.string.event_safe_point_sent, eventTime()))
         } else {
             FilterStorage.saveFilterResult(this, isFiltered = true, zoneName = blockedBy.name)
             val safePoint = lastSafePoint
             if (safePoint == null) {
                 FilterStorage.appendEvent(
                     this,
-                    "${eventTime()}  Точка внутри «${blockedBy.name}»; безопасной точки ещё нет",
+                    getString(R.string.event_zone_no_safe_point, eventTime(), blockedBy.name),
                 )
             } else {
                 inject(safePoint)
                 FilterStorage.appendEvent(
                     this,
-                    "${eventTime()}  Точка внутри «${blockedBy.name}»; удерживается последняя безопасная",
+                    getString(R.string.event_zone_holding_safe_point, eventTime(), blockedBy.name),
                 )
             }
         }
@@ -155,9 +155,9 @@ class GpsFilterService : Service(), LocationListener {
         try {
             locationManager.setTestProviderLocation(LocationManager.GPS_PROVIDER, mockLocation)
         } catch (exception: SecurityException) {
-            fail("Потерян доступ к mock GPS: ${exception.message}")
+            fail(getString(R.string.service_mock_access_lost, exception.message))
         } catch (exception: IllegalArgumentException) {
-            fail("Mock GPS provider недоступен: ${exception.message}")
+            fail(getString(R.string.service_mock_unavailable, exception.message))
         }
     }
 
@@ -173,14 +173,14 @@ class GpsFilterService : Service(), LocationListener {
         }
         testProviderInstalled = false
         FilterStorage.setFilteringEnabled(this, false)
-        FilterStorage.appendEvent(this, "${eventTime()}  Mock GPS выключен")
+        FilterStorage.appendEvent(this, getString(R.string.event_mock_disabled, eventTime()))
         if (removeNotification) stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
 
     private fun fail(message: String) {
         FilterStorage.setFilteringEnabled(this, false)
-        FilterStorage.appendEvent(this, "${eventTime()}  Ошибка: $message")
+        FilterStorage.appendEvent(this, getString(R.string.event_error, eventTime(), message))
         stopFiltering(removeNotification = true)
     }
 
@@ -194,12 +194,12 @@ class GpsFilterService : Service(), LocationListener {
     private fun startAsForegroundService() {
         val notificationManager = getSystemService(NotificationManager::class.java)
         notificationManager.createNotificationChannel(
-            NotificationChannel(CHANNEL_ID, "GPS Filter", NotificationManager.IMPORTANCE_LOW),
+            NotificationChannel(CHANNEL_ID, getString(R.string.notification_channel_name), NotificationManager.IMPORTANCE_LOW),
         )
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle("GPS Filter активен")
-            .setContentText("Удерживает последнюю безопасную геопозицию внутри приватных зон")
+            .setContentTitle(getString(R.string.notification_title))
+            .setContentText(getString(R.string.notification_text))
             .setOngoing(true)
             .build()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {

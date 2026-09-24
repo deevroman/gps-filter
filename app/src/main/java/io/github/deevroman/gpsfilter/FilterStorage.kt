@@ -23,7 +23,7 @@ object FilterStorage {
     private const val KEY_TILE_URL = "tile_url"
     private const val KEY_TILE_ATTRIBUTION = "tile_attribution"
     private const val MAX_LOG_ENTRIES = 80
-    private const val CURRENT_SEED_VERSION = 2
+    private const val CURRENT_SEED_VERSION = 3
 
     data class SafePoint(
         val latitude: Double,
@@ -88,12 +88,17 @@ object FilterStorage {
         val seedVersion = prefs.getInt(KEY_SEED_VERSION, 0)
         if (seedVersion < 1 && currentZones.isEmpty()) {
             currentZones = listOf(
-                BoundingBox(1, "Центр Москвы", 55.7470, 37.6030, 55.7730, 37.6540),
-                BoundingBox(2, "Дом", 55.8310, 37.4550, 55.8380, 37.4690),
+                BoundingBox(1, context.getString(R.string.zone_moscow_center), 55.7470, 37.6030, 55.7730, 37.6540),
+                BoundingBox(2, context.getString(R.string.zone_home), 55.8310, 37.4550, 55.8380, 37.4690),
             )
         }
-        if (seedVersion < 2 && currentZones.none { it.id == LADOGA_LAKE.id }) {
-            currentZones = currentZones + LADOGA_LAKE
+        val ladogaLake = ladogaLake(context)
+        if (seedVersion < 2 && currentZones.none { it.id == ladogaLake.id }) {
+            currentZones = currentZones + ladogaLake
+        }
+        val sheremetyevo = sheremetyevo(context)
+        if (seedVersion < 3 && currentZones.none { it.id == sheremetyevo.id }) {
+            currentZones = currentZones + sheremetyevo
         }
         if (seedVersion < CURRENT_SEED_VERSION) {
             saveZones(context, currentZones)
@@ -187,13 +192,22 @@ object FilterStorage {
             .apply()
     }
 
-    private val LADOGA_LAKE = BoundingBox(
+    private fun ladogaLake(context: Context) = BoundingBox(
         id = 3,
-        name = "Ладожское озеро",
+        name = context.getString(R.string.zone_ladoga_lake),
         south = 60.018549,
         west = 31.114999,
         north = 60.167474,
         east = 31.605264,
+    )
+
+    private fun sheremetyevo(context: Context) = BoundingBox(
+        id = 4,
+        name = context.getString(R.string.zone_sheremetyevo),
+        south = 55.960323,
+        west = 37.385142,
+        north = 55.986979,
+        east = 37.442777,
     )
 
     const val DEFAULT_TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"

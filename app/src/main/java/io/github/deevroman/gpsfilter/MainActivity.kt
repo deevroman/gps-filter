@@ -15,6 +15,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -61,6 +62,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -91,8 +93,8 @@ fun GpsFilterScreen() {
         mutableStateListOf<String>().apply {
             val storedLog = FilterStorage.eventLog(context)
             if (storedLog.isEmpty()) {
-                FilterStorage.appendEvent(context, "${eventTime()}  GPS Filter запущен")
-                FilterStorage.appendEvent(context, "${eventTime()}  Загружено зон: ${initialZones.size}")
+                FilterStorage.appendEvent(context, context.getString(R.string.event_app_started, eventTime()))
+                FilterStorage.appendEvent(context, context.getString(R.string.event_zones_loaded, eventTime(), initialZones.size))
             }
             addAll(FilterStorage.eventLog(context))
         }
@@ -123,21 +125,24 @@ fun GpsFilterScreen() {
         refreshState()
     }
 
+    fun appendUiEvent(@StringRes messageRes: Int, vararg formatArgs: Any) =
+        appendUiEvent(context.getString(messageRes, *formatArgs))
+
     fun startFiltering() {
         FilterStorage.setFilteringEnabled(context, true)
         filteringEnabled = true
-        appendUiEvent("Запрошен запуск mock GPS")
+        appendUiEvent(R.string.event_start_mock_gps_requested)
         GpsFilterService.start(context)
     }
 
     fun toggleGpxRecording() {
         if (gpxRecording) {
             GpxTrackRecorder.stop(context)
-            appendUiEvent("Запись GPX-трека остановлена")
+            appendUiEvent(R.string.event_gpx_stopped)
         } else {
             GpxTrackRecorder.start(context)
-                .onSuccess { appendUiEvent("Начата запись GPX-трека реальных координат") }
-                .onFailure { appendUiEvent("Не удалось начать запись GPX-трека") }
+                .onSuccess { appendUiEvent(R.string.event_gpx_started) }
+                .onFailure { appendUiEvent(R.string.event_gpx_start_failed) }
         }
     }
 
@@ -145,16 +150,16 @@ fun GpsFilterScreen() {
         importingGeoJson = true
         geoJsonImportError = null
         Thread {
-            val result = GeoJsonImporter.importFromUrl(url)
+            val result = GeoJsonImporter.importFromUrl(context, url)
             Handler(Looper.getMainLooper()).post {
                 importingGeoJson = false
                 result.onSuccess { importedZones ->
                     zones.addAll(importedZones)
                     FilterStorage.saveZones(context, zones)
-                    appendUiEvent("Импортировано зон GeoJSON: ${importedZones.size}")
+                    appendUiEvent(R.string.event_geojson_imported, importedZones.size)
                     showImportDialog = false
                 }.onFailure { exception ->
-                    geoJsonImportError = exception.message ?: "Не удалось импортировать GeoJSON"
+                    geoJsonImportError = exception.message ?: context.getString(R.string.error_geojson_import)
                 }
             }
         }.start()
@@ -166,7 +171,7 @@ fun GpsFilterScreen() {
         if (permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true) {
             startFiltering()
         } else {
-            appendUiEvent("Нужен доступ к точной геопозиции для запуска фильтра")
+            appendUiEvent(R.string.event_location_permission_required)
         }
     }
 
@@ -186,7 +191,7 @@ fun GpsFilterScreen() {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("GPS Filter") },
+                title = { Text(stringResource(R.string.app_name)) },
             )
         },
     ) { innerPadding ->
@@ -215,7 +220,7 @@ fun GpsFilterScreen() {
                                     Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS)
                                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
                                 )
-                            }.onFailure { appendUiEvent("Не удалось открыть параметры разработчика") }
+                            }.onFailure { appendUiEvent(R.string.event_developer_settings_failed) }
                         },
                     )
                 }
@@ -239,7 +244,7 @@ fun GpsFilterScreen() {
             }
             item {
                 Box(modifier = Modifier.padding(horizontal = 16.dp)) {
-                    Text("Зоны фильтрации", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.zones_title), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                 }
             }
             items(zones, key = { it.id }) { zone ->
@@ -249,7 +254,7 @@ fun GpsFilterScreen() {
                         onDelete = {
                             zones.remove(zone)
                             FilterStorage.saveZones(context, zones)
-                            appendUiEvent("Удалена зона «${zone.name}»")
+                            appendUiEvent(R.string.event_zone_deleted, zone.name)
                         },
                     )
                 }
@@ -260,10 +265,10 @@ fun GpsFilterScreen() {
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     OutlinedButton(onClick = { showImportDialog = true }, modifier = Modifier.fillMaxWidth()) {
-                        Text("Импорт GeoJSON")
+                        Text(stringResource(R.string.import_geojson))
                     }
                     OutlinedButton(onClick = { showAddDialog = true }, modifier = Modifier.fillMaxWidth()) {
-                        Text("Добавить bbox")
+                        Text(stringResource(R.string.add_bbox))
                     }
                 }
             }
@@ -271,7 +276,7 @@ fun GpsFilterScreen() {
             item {
                 Box(modifier = Modifier.padding(horizontal = 16.dp)) {
                     Button(onClick = ::toggleGpxRecording, modifier = Modifier.fillMaxWidth()) {
-                        Text(if (gpxRecording) "Остановить запись GPX" else "Записывать GPX-трек")
+                        Text(stringResource(if (gpxRecording) R.string.stop_gpx_recording else R.string.start_gpx_recording))
                     }
                 }
             }
@@ -280,7 +285,7 @@ fun GpsFilterScreen() {
                     OutlinedButton(
                         onClick = { showMapSettings = true },
                         modifier = Modifier.fillMaxWidth(),
-                    ) { Text("Настроить карту") }
+                    ) { Text(stringResource(R.string.configure_map)) }
                 }
             }
         }
@@ -292,7 +297,7 @@ fun GpsFilterScreen() {
             onAdd = { name, south, west, north, east ->
                 zones.add(BoundingBox(System.currentTimeMillis(), name, south, west, north, east))
                 FilterStorage.saveZones(context, zones)
-                appendUiEvent("Добавлена зона «$name»")
+                appendUiEvent(R.string.event_zone_added, name)
                 showAddDialog = false
             },
         )
@@ -307,7 +312,7 @@ fun GpsFilterScreen() {
                 tileUrl = newTileUrl
                 tileAttribution = newAttribution
                 FilterStorage.saveTileSource(context, newTileUrl, newAttribution)
-                appendUiEvent("Изменён URL подложки карты")
+                appendUiEvent(R.string.event_tile_source_changed)
                 showMapSettings = false
             },
         )
@@ -338,18 +343,23 @@ private fun CurrentLocationStatus(
         Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
             when {
                 incomingPoint == null -> {
-                    Text("Ожидание координат", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.waiting_for_location), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                     Text(
-                        "Точка появится после первого обновления геопозиции.",
+                        stringResource(R.string.location_will_appear),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 4.dp),
                     )
                 }
                 filtered -> {
-                    Text("Текущие координаты отфильтрованы", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.coordinates_filtered), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                     Text(
-                        "Зона: ${filterResult.zoneName ?: "без названия"}\nGPS: ${formatCoordinate(incomingPoint.latitude)}, ${formatCoordinate(incomingPoint.longitude)}",
+                        stringResource(
+                            R.string.filtered_location,
+                            filterResult.zoneName ?: stringResource(R.string.unnamed_zone),
+                            formatCoordinate(incomingPoint.latitude),
+                            formatCoordinate(incomingPoint.longitude),
+                        ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onErrorContainer,
                         modifier = Modifier.padding(top = 4.dp),
@@ -357,7 +367,7 @@ private fun CurrentLocationStatus(
                 }
                 else -> {
                     Text(
-                        if (filteringEnabled) "Текущие координаты вне зон" else "Фильтрация выключена",
+                        stringResource(if (filteringEnabled) R.string.coordinates_outside_zones else R.string.filtering_disabled),
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold,
                     )
@@ -384,11 +394,11 @@ private fun FilterControl(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("Фильтрация", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text(stringResource(R.string.filtering), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Switch(checked = filteringEnabled, onCheckedChange = { onToggle() })
             }
             OutlinedButton(onClick = onOpenDeveloperSettings, modifier = Modifier.fillMaxWidth()) {
-                Text("Настроить системный mock GPS")
+                Text(stringResource(R.string.configure_mock_gps))
             }
         }
     }
@@ -434,12 +444,18 @@ private fun ZoneRow(zone: BoundingBox, onDelete: () -> Unit) {
             Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
                 Text(zone.name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                 Text(
-                    "S ${formatCoordinate(zone.south)} · W ${formatCoordinate(zone.west)}\nN ${formatCoordinate(zone.north)} · E ${formatCoordinate(zone.east)}",
+                    stringResource(
+                        R.string.zone_coordinates,
+                        formatCoordinate(zone.south),
+                        formatCoordinate(zone.west),
+                        formatCoordinate(zone.north),
+                        formatCoordinate(zone.east),
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            TextButton(onClick = onDelete) { Text("Удалить") }
+            TextButton(onClick = onDelete) { Text(stringResource(R.string.delete)) }
         }
     }
 }
@@ -448,7 +464,7 @@ private fun ZoneRow(zone: BoundingBox, onDelete: () -> Unit) {
 private fun EventLog(log: List<String>) {
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.inverseSurface)) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text("Отладочный журнал", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.inverseOnSurface, fontWeight = FontWeight.SemiBold)
+            Text(stringResource(R.string.debug_log), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.inverseOnSurface, fontWeight = FontWeight.SemiBold)
             HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp), color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = .2f))
             log.takeLast(8).forEach { entry ->
                 Text(
@@ -481,32 +497,32 @@ private fun AddBoundingBoxDialog(
     val valid = name.isNotBlank() && southValue != null && westValue != null && northValue != null && eastValue != null &&
         southValue < northValue && westValue < eastValue
     MovableDialog(
-        title = "Новый bbox",
+        title = stringResource(R.string.new_bbox),
         onDismissRequest = onDismiss,
         content = {
             Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Укажите границы в десятичных градусах.", style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(R.string.bbox_hint), style = MaterialTheme.typography.bodySmall)
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("Название") },
+                    label = { Text(stringResource(R.string.name)) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    CoordinateField("Юг (S)", south, { south = it }, Modifier.weight(1f))
-                    CoordinateField("Запад (W)", west, { west = it }, Modifier.weight(1f))
+                    CoordinateField(stringResource(R.string.south), south, { south = it }, Modifier.weight(1f))
+                    CoordinateField(stringResource(R.string.west), west, { west = it }, Modifier.weight(1f))
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    CoordinateField("Север (N)", north, { north = it }, Modifier.weight(1f))
-                    CoordinateField("Восток (E)", east, { east = it }, Modifier.weight(1f))
+                    CoordinateField(stringResource(R.string.north), north, { north = it }, Modifier.weight(1f))
+                    CoordinateField(stringResource(R.string.east), east, { east = it }, Modifier.weight(1f))
                 }
             }
         },
         actions = {
-            TextButton(onClick = onDismiss) { Text("Отмена") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
             TextButton(enabled = valid, onClick = { onAdd(name.trim(), southValue!!, westValue!!, northValue!!, eastValue!!) }) {
-                Text("Добавить")
+                Text(stringResource(R.string.add))
             }
         },
     )
@@ -525,41 +541,41 @@ private fun MapSettingsDialog(
     val validTemplate = normalizedUrl.startsWith("https://") &&
         normalizedUrl.contains("{z}") && normalizedUrl.contains("{x}") && normalizedUrl.contains("{y}")
     MovableDialog(
-        title = "Подложка карты",
+        title = stringResource(R.string.map_tiles),
         onDismissRequest = onDismiss,
         content = {
             Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    "Введите HTTPS-шаблон raster-тайлов. В URL обязательны {z}, {x} и {y}.",
+                    stringResource(R.string.tile_url_hint),
                     style = MaterialTheme.typography.bodySmall,
                 )
                 OutlinedTextField(
                     value = tileUrl,
                     onValueChange = { tileUrl = it },
-                    label = { Text("URL тайлов") },
+                    label = { Text(stringResource(R.string.tile_url)) },
                     modifier = Modifier.fillMaxWidth(),
                     supportingText = {
-                        if (!validTemplate) Text("Например: https://server/{z}/{x}/{y}.png")
+                        if (!validTemplate) Text(stringResource(R.string.tile_url_example))
                     },
                 )
                 OutlinedTextField(
                     value = attribution,
                     onValueChange = { attribution = it },
-                    label = { Text("Атрибуция") },
+                    label = { Text(stringResource(R.string.attribution)) },
                     modifier = Modifier.fillMaxWidth(),
-                    supportingText = { Text("Укажите атрибуцию поставщика тайлов") },
+                    supportingText = { Text(stringResource(R.string.attribution_hint)) },
                 )
             }
         },
         actions = {
             TextButton(
                 onClick = { onSave(FilterStorage.DEFAULT_TILE_URL, FilterStorage.DEFAULT_TILE_ATTRIBUTION) },
-            ) { Text("OSM") }
-            TextButton(onClick = onDismiss) { Text("Отмена") }
+            ) { Text(stringResource(R.string.osm)) }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
             TextButton(
                 enabled = validTemplate && attribution.isNotBlank(),
                 onClick = { onSave(normalizedUrl, attribution.trim()) },
-            ) { Text("Сохранить") }
+            ) { Text(stringResource(R.string.save)) }
         },
     )
 }
@@ -574,21 +590,18 @@ private fun GeoJsonImportDialog(
     var url by rememberSaveable { mutableStateOf("") }
     val validUrl = url.trim().startsWith("https://")
     MovableDialog(
-        title = "Импорт GeoJSON",
+        title = stringResource(R.string.geojson_import_title),
         onDismissRequest = onDismiss,
         content = {
             Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    "Вставьте HTTPS-ссылку на GeoJSON. Поддерживаются raw-ссылки и обычные GitHub blob-ссылки.",
-                    style = MaterialTheme.typography.bodySmall,
-                )
                 OutlinedTextField(
                     value = url,
                     onValueChange = { url = it },
-                    label = { Text("URL GeoJSON") },
+                    placeholder = { Text(stringResource(R.string.geojson_url)) },
                     modifier = Modifier.fillMaxWidth(),
                     enabled = !isImporting,
-                    singleLine = true,
+                    minLines = 3,
+                    maxLines = 6,
                     supportingText = {
                         if (error != null) Text(error)
                     },
@@ -596,15 +609,15 @@ private fun GeoJsonImportDialog(
                 OutlinedButton(
                     onClick = { url = DEFAULT_GEOJSON_URL },
                     enabled = !isImporting,
-                ) { Text("Подставить URL по умолчанию") }
+                ) { Text(stringResource(R.string.default_geojson_url)) }
             }
         },
         actions = {
-            TextButton(enabled = !isImporting, onClick = onDismiss) { Text("Отмена") }
+            TextButton(enabled = !isImporting, onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
             TextButton(
                 enabled = validUrl && !isImporting,
                 onClick = { onImport(url.trim()) },
-            ) { Text(if (isImporting) "Загрузка…" else "Импортировать") }
+            ) { Text(stringResource(if (isImporting) R.string.loading else R.string.import_action)) }
         },
     )
 }
