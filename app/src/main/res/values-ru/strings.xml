@@ -12,6 +12,10 @@
     <string name="event_zone_deleted">Удалена зона «%1$s»</string>
     <string name="event_zone_added">Добавлена зона «%1$s»</string>
     <string name="event_tile_source_changed">Изменён URL подложки карты</string>
+    <string name="event_zone_duplicate">Зона с названием «%1$s» уже существует</string>
+    <string name="event_geojson_duplicates_skipped">В GeoJSON нет новых зон</string>
+    <string name="event_cache_cleared">Кэш приложения очищен</string>
+    <string name="event_cache_clear_failed">Не удалось полностью очистить кэш приложения</string>
     <string name="error_geojson_import">Не удалось импортировать GeoJSON</string>
     <string name="zones_title">Зоны фильтрации</string>
     <string name="import_geojson">Импорт GeoJSON</string>
@@ -19,6 +23,7 @@
     <string name="stop_gpx_recording">Остановить запись GPX</string>
     <string name="start_gpx_recording">Записывать GPX-трек</string>
     <string name="configure_map">Настроить карту</string>
+    <string name="clear_cache">Очистить кэш</string>
     <string name="waiting_for_location">Ожидание координат</string>
     <string name="location_will_appear">Точка появится после первого обновления геопозиции.</string>
     <string name="coordinates_filtered">Текущие координаты отфильтрованы</string>
@@ -80,4 +85,5 @@
     <string name="notification_channel_name">GPS Filter</string>
     <string name="notification_title">GPS Filter активен</string>
     <string name="notification_text">Удерживает последнюю безопасную геопозицию внутри приватных зон</string>
+    <string name="default_osm_attribution">© Участники OpenStreetMap</string>
 </resources>

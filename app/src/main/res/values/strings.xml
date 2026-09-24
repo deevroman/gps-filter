@@ -12,6 +12,10 @@
     <string name="event_zone_deleted">Zone “%1$s” deleted</string>
     <string name="event_zone_added">Zone “%1$s” added</string>
     <string name="event_tile_source_changed">Map tile URL changed</string>
+    <string name="event_zone_duplicate">A zone named “%1$s” already exists</string>
+    <string name="event_geojson_duplicates_skipped">No new zones found in GeoJSON</string>
+    <string name="event_cache_cleared">Application cache cleared</string>
+    <string name="event_cache_clear_failed">Could not fully clear the application cache</string>
     <string name="error_geojson_import">Could not import GeoJSON</string>
     <string name="zones_title">Filter zones</string>
     <string name="import_geojson">Import GeoJSON</string>
@@ -19,6 +23,7 @@
     <string name="stop_gpx_recording">Stop GPX recording</string>
     <string name="start_gpx_recording">Record GPX track</string>
     <string name="configure_map">Configure map</string>
+    <string name="clear_cache">Clear cache</string>
     <string name="waiting_for_location">Waiting for coordinates</string>
     <string name="location_will_appear">A point will appear after the first location update.</string>
     <string name="coordinates_filtered">Current coordinates are filtered</string>
@@ -80,4 +85,5 @@
     <string name="notification_channel_name">GPS Filter</string>
     <string name="notification_title">GPS Filter is active</string>
     <string name="notification_text">Holding the last safe location inside private zones</string>
+    <string name="default_osm_attribution">© OpenStreetMap contributors</string>
 </resources>

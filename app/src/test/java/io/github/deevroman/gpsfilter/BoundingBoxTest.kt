@@ -1,6 +1,7 @@
 package io.github.deevroman.gpsfilter
 
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -29,5 +30,14 @@ class BoundingBoxTest {
     fun `point outside bbox is safe`() {
         assertFalse(zone.contains(55.81, 37.55))
         assertFalse(zone.contains(55.75, 37.61))
+    }
+
+    @Test
+    fun `zones with names differing only by case or spaces are deduplicated`() {
+        val duplicate = zone.copy(id = 2, name = "  test ZONE ")
+
+        val uniqueZones = FilterStorage.deduplicateZones(listOf(zone, duplicate))
+
+        assertEquals(listOf(zone), uniqueZones)
     }
 }

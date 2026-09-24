@@ -3,6 +3,7 @@ package io.github.deevroman.gpsfilter
 import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.Locale
 
 /** Small persistent store used by the UI and the foreground service. */
 object FilterStorage {
@@ -23,7 +24,7 @@ object FilterStorage {
     private const val KEY_TILE_URL = "tile_url"
     private const val KEY_TILE_ATTRIBUTION = "tile_attribution"
     private const val MAX_LOG_ENTRIES = 80
-    private const val CURRENT_SEED_VERSION = 3
+    private const val CURRENT_SEED_VERSION = 4
 
     data class SafePoint(
         val latitude: Double,
@@ -48,7 +49,7 @@ object FilterStorage {
 
     fun zones(context: Context): List<BoundingBox> = runCatching {
         val array = JSONArray(preferences(context).getString(KEY_ZONES, "[]"))
-        buildList {
+        val parsedZones = buildList {
             for (index in 0 until array.length()) {
                 val item = array.getJSONObject(index)
                 add(
@@ -63,11 +64,12 @@ object FilterStorage {
                 )
             }
         }
+        deduplicateZones(parsedZones)
     }.getOrDefault(emptyList())
 
     fun saveZones(context: Context, zones: List<BoundingBox>) {
         val array = JSONArray()
-        zones.forEach { zone ->
+        deduplicateZones(zones).forEach { zone ->
             array.put(
                 JSONObject()
                     .put("id", zone.id)
@@ -80,6 +82,14 @@ object FilterStorage {
         }
         preferences(context).edit().putString(KEY_ZONES, array.toString()).apply()
     }
+
+    fun containsZoneName(zones: List<BoundingBox>, name: String): Boolean =
+        zones.any { normalizedZoneName(it.name) == normalizedZoneName(name) }
+
+    fun deduplicateZones(zones: List<BoundingBox>): List<BoundingBox> =
+        zones.distinctBy { normalizedZoneName(it.name) }
+
+    private fun normalizedZoneName(name: String): String = name.trim().lowercase(Locale.ROOT)
 
     /** Adds initial demo zones once, without restoring a zone deleted by the user. */
     fun seedInitialZones(context: Context): List<BoundingBox> {
@@ -101,6 +111,7 @@ object FilterStorage {
             currentZones = currentZones + sheremetyevo
         }
         if (seedVersion < CURRENT_SEED_VERSION) {
+            currentZones = deduplicateZones(currentZones)
             saveZones(context, currentZones)
             prefs.edit().putInt(KEY_SEED_VERSION, CURRENT_SEED_VERSION).apply()
         }
@@ -117,13 +128,23 @@ object FilterStorage {
         preferences(context).getString(KEY_TILE_URL, DEFAULT_TILE_URL) ?: DEFAULT_TILE_URL
 
     fun tileAttribution(context: Context): String =
-        preferences(context).getString(KEY_TILE_ATTRIBUTION, DEFAULT_TILE_ATTRIBUTION) ?: DEFAULT_TILE_ATTRIBUTION
+        preferences(context).getString(KEY_TILE_ATTRIBUTION, null)
+            ?.takeUnless { it == LEGACY_DEFAULT_TILE_ATTRIBUTION }
+            ?: defaultTileAttribution(context)
+
+    fun defaultTileAttribution(context: Context): String =
+        context.getString(R.string.default_osm_attribution)
 
     fun saveTileSource(context: Context, url: String, attribution: String) {
-        preferences(context).edit()
-            .putString(KEY_TILE_URL, url)
-            .putString(KEY_TILE_ATTRIBUTION, attribution)
-            .apply()
+        preferences(context).edit().apply {
+            putString(KEY_TILE_URL, url)
+            if (url == DEFAULT_TILE_URL && attribution == defaultTileAttribution(context)) {
+                remove(KEY_TILE_ATTRIBUTION)
+            } else {
+                putString(KEY_TILE_ATTRIBUTION, attribution)
+            }
+            apply()
+        }
     }
 
     fun eventLog(context: Context): List<String> = runCatching {
@@ -211,5 +232,5 @@ object FilterStorage {
     )
 
     const val DEFAULT_TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-    const val DEFAULT_TILE_ATTRIBUTION = "© OpenStreetMap contributors"
+    private const val LEGACY_DEFAULT_TILE_ATTRIBUTION = "© OpenStreetMap contributors"
 }

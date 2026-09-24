@@ -113,6 +113,7 @@ fun GpsFilterScreen() {
     var geoJsonImportError by remember { mutableStateOf<String?>(null) }
     var zonePendingDeletion by remember { mutableStateOf<BoundingBox?>(null) }
     var focusedZone by remember { mutableStateOf<BoundingBox?>(null) }
+    var focusAllZones by remember { mutableStateOf(false) }
     var mapFocusRequest by remember { mutableStateOf(0) }
 
     fun refreshState() {
@@ -131,6 +132,22 @@ fun GpsFilterScreen() {
 
     fun appendUiEvent(@StringRes messageRes: Int, vararg formatArgs: Any) =
         appendUiEvent(context.getString(messageRes, *formatArgs))
+
+    fun saveDisplayedZones(updatedZones: List<BoundingBox>) {
+        val uniqueZones = FilterStorage.deduplicateZones(updatedZones)
+        zones.clear()
+        zones.addAll(uniqueZones)
+        FilterStorage.saveZones(context, uniqueZones)
+    }
+
+    fun clearCache() {
+        Thread {
+            val cacheCleared = context.cacheDir.listFiles().orEmpty().all { it.deleteRecursively() }
+            Handler(Looper.getMainLooper()).post {
+                appendUiEvent(if (cacheCleared) R.string.event_cache_cleared else R.string.event_cache_clear_failed)
+            }
+        }.start()
+    }
 
     fun startFiltering() {
         FilterStorage.setFilteringEnabled(context, true)
@@ -158,9 +175,14 @@ fun GpsFilterScreen() {
             Handler(Looper.getMainLooper()).post {
                 importingGeoJson = false
                 result.onSuccess { importedZones ->
-                    zones.addAll(importedZones)
-                    FilterStorage.saveZones(context, zones)
-                    appendUiEvent(R.string.event_geojson_imported, importedZones.size)
+                    val zonesToAdd = FilterStorage.deduplicateZones(importedZones)
+                        .filterNot { imported -> FilterStorage.containsZoneName(zones, imported.name) }
+                    if (zonesToAdd.isEmpty()) {
+                        appendUiEvent(R.string.event_geojson_duplicates_skipped)
+                    } else {
+                        saveDisplayedZones(zones + zonesToAdd)
+                        appendUiEvent(R.string.event_geojson_imported, zonesToAdd.size)
+                    }
                     showImportDialog = false
                 }.onFailure { exception ->
                     geoJsonImportError = exception.message ?: context.getString(R.string.error_geojson_import)
@@ -252,12 +274,22 @@ fun GpsFilterScreen() {
                     tileAttribution = tileAttribution,
                     incomingPoint = incomingPoint,
                     focusedZone = focusedZone,
+                    focusAllZones = focusAllZones,
                     focusRequest = mapFocusRequest,
                 )
             }
             item {
                 Box(modifier = Modifier.padding(horizontal = 16.dp)) {
-                    Text(stringResource(R.string.zones_title), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        text = stringResource(R.string.zones_title),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.clickable {
+                            focusedZone = null
+                            focusAllZones = true
+                            mapFocusRequest += 1
+                        },
+                    )
                 }
             }
             items(zones, key = { it.id }) { zone ->
@@ -266,6 +298,7 @@ fun GpsFilterScreen() {
                         zone = zone,
                         onClick = {
                             focusedZone = zone
+                            focusAllZones = false
                             mapFocusRequest += 1
                         },
                         onDelete = { zonePendingDeletion = zone },
@@ -301,6 +334,13 @@ fun GpsFilterScreen() {
                     ) { Text(stringResource(R.string.configure_map)) }
                 }
             }
+            item {
+                Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                    OutlinedButton(onClick = ::clearCache, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(R.string.clear_cache))
+                    }
+                }
+            }
         }
     }
 
@@ -308,9 +348,12 @@ fun GpsFilterScreen() {
         AddBoundingBoxDialog(
             onDismiss = { showAddDialog = false },
             onAdd = { name, south, west, north, east ->
-                zones.add(BoundingBox(System.currentTimeMillis(), name, south, west, north, east))
-                FilterStorage.saveZones(context, zones)
-                appendUiEvent(R.string.event_zone_added, name)
+                if (FilterStorage.containsZoneName(zones, name)) {
+                    appendUiEvent(R.string.event_zone_duplicate, name)
+                } else {
+                    saveDisplayedZones(zones + BoundingBox(System.currentTimeMillis(), name, south, west, north, east))
+                    appendUiEvent(R.string.event_zone_added, name)
+                }
                 showAddDialog = false
             },
         )
@@ -346,7 +389,7 @@ fun GpsFilterScreen() {
             onDismiss = { zonePendingDeletion = null },
             onDelete = {
                 zones.remove(zone)
-                FilterStorage.saveZones(context, zones)
+                saveDisplayedZones(zones)
                 if (focusedZone?.id == zone.id) focusedZone = null
                 appendUiEvent(R.string.event_zone_deleted, zone.name)
                 zonePendingDeletion = null
@@ -435,6 +478,7 @@ private fun ZoneMap(
     tileAttribution: String,
     incomingPoint: FilterStorage.IncomingPoint?,
     focusedZone: BoundingBox?,
+    focusAllZones: Boolean,
     focusRequest: Int,
 ) {
     Box(modifier = Modifier.fillMaxWidth().height(320.dp)) {
@@ -444,6 +488,7 @@ private fun ZoneMap(
             tileAttribution = tileAttribution,
             incomingPoint = incomingPoint,
             focusedZone = focusedZone,
+            focusAllZones = focusAllZones,
             focusRequest = focusRequest,
             modifier = Modifier.fillMaxSize(),
         )
@@ -490,15 +535,15 @@ private fun ZoneRow(zone: BoundingBox, onClick: () -> Unit, onDelete: () -> Unit
 
 @Composable
 private fun EventLog(log: List<String>) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.inverseSurface)) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(stringResource(R.string.debug_log), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.inverseOnSurface, fontWeight = FontWeight.SemiBold)
-            HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp), color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = .2f))
+            Text(stringResource(R.string.debug_log), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
+            HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp), color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .2f))
             log.takeLast(8).forEach { entry ->
                 Text(
                     entry,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = .85f),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .85f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(vertical = 2.dp),
@@ -563,6 +608,7 @@ private fun MapSettingsDialog(
     onDismiss: () -> Unit,
     onSave: (String, String) -> Unit,
 ) {
+    val context = LocalContext.current
     var tileUrl by rememberSaveable { mutableStateOf(initialTileUrl) }
     var attribution by rememberSaveable { mutableStateOf(initialAttribution) }
     val normalizedUrl = tileUrl.trim()
@@ -597,7 +643,7 @@ private fun MapSettingsDialog(
         },
         actions = {
             TextButton(
-                onClick = { onSave(FilterStorage.DEFAULT_TILE_URL, FilterStorage.DEFAULT_TILE_ATTRIBUTION) },
+                onClick = { onSave(FilterStorage.DEFAULT_TILE_URL, FilterStorage.defaultTileAttribution(context)) },
             ) { Text(stringResource(R.string.osm)) }
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
             TextButton(

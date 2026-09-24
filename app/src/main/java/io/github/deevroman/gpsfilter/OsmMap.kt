@@ -32,6 +32,7 @@ fun OsmMap(
     tileAttribution: String,
     incomingPoint: FilterStorage.IncomingPoint?,
     focusedZone: BoundingBox?,
+    focusAllZones: Boolean,
     focusRequest: Int,
     modifier: Modifier = Modifier,
 ) {
@@ -85,8 +86,11 @@ fun OsmMap(
         },
         update = {
             map?.setStyle(Style.Builder().fromJson(styleJson)) {
-                if (focusedZone != null && handledFocusRequest != focusRequest) {
+                if (handledFocusRequest != focusRequest && focusedZone != null) {
                     moveCameraToZone(map!!, focusedZone)
+                    handledFocusRequest = focusRequest
+                } else if (handledFocusRequest != focusRequest && focusAllZones) {
+                    moveCameraToAllZones(map!!, zoneSnapshot, incomingPoint)
                     handledFocusRequest = focusRequest
                 } else if (positionedForSignature != cameraSignature) {
                     moveCameraToDefaultView(map!!, zoneSnapshot, incomingPoint)
@@ -102,6 +106,25 @@ private fun moveCameraToZone(map: MapLibreMap, zone: BoundingBox) {
         .include(LatLng(zone.south, zone.west))
         .include(LatLng(zone.north, zone.east))
         .build()
+    map.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds, 48))
+}
+
+private fun moveCameraToAllZones(
+    map: MapLibreMap,
+    zones: List<BoundingBox>,
+    incomingPoint: FilterStorage.IncomingPoint?,
+) {
+    if (zones.isEmpty()) {
+        moveCameraToDefaultView(map, zones, incomingPoint)
+        return
+    }
+    val bounds = LatLngBounds.Builder().apply {
+        incomingPoint?.let { include(LatLng(it.latitude, it.longitude)) }
+        zones.forEach { zone ->
+            include(LatLng(zone.south, zone.west))
+            include(LatLng(zone.north, zone.east))
+        }
+    }.build()
     map.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds, 48))
 }
 
